@@ -22,3 +22,5 @@ Target of this project is a new "pimped" version of the game without loosing the
 
 To implement this, I chose to use an arduino uno.
 
+Lets go
+
