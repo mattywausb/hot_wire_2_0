@@ -17,9 +17,6 @@ unsigned long ledRing_nextAnimationTime=0;
 int sound_frameIndex=0;
 unsigned long sound_nextAnimationTime=0;
 
-#define RUMBLE_PIND 13
-
-
 
 /* --------------- General ouput processing functions --------------------*/
 
