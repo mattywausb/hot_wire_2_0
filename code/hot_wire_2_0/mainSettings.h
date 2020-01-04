@@ -1,3 +1,6 @@
+#ifndef __mainSettings_h__
+#define __mainSettings_h__
+
 #define TRACE_ON 
 
 #define ZONE_NONE -1
@@ -16,3 +19,5 @@ typedef struct {
     float s;       // a fraction between 0 and 1
     float v;       // a fraction between 0 and 1
 } t_color_hsv;
+
+#endif

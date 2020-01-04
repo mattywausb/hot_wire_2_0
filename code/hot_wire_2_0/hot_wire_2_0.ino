@@ -1,8 +1,10 @@
-/*
 
-*/
+#include "mainSettings.h"
 
-#include "pitches.h"
+#ifdef TRACE_ON
+#define TRACE_MODES
+//#define TRACE_SCORE
+#endif
 
 enum PROCESS_MODES {
   IDLE_MODE, 
@@ -17,43 +19,51 @@ PROCESS_MODES g_process_mode = SETUP_MODE;
 
 /* current game setting */
 
-unsigned long foul_duration=1000;
-unsigned long foul_cooldown=1000;
-int const foul_limit=8;
+#define FOUL_LIMIT 32000
 
-int g_current_difficulty=0;
+int g_current_difficulty=1;
 
 /* current game state */
+unsigned long foul_detect_interval=0;
+int foul_speed=0;
+int foul_fallback_rate=0;
 int foul_counter=0;
-unsinged long foul_start_time=0;
+int foul_autoincrement=0;
+unsigned long foul_current_cumulation=0;
+unsigned long mode_time_sync_register=0;
+boolean foul_running=false;
 int start_zone=-4;
 int finish_zone=-4;
 
 
-void setup() {
+void setup() 
+{
 
   #ifdef TRACE_ON 
     char compile_signature[] = "--- START (Build: " __DATE__ " " __TIME__ ") ---";   
     Serial.begin(9600);
     Serial.println(compile_signature); 
   #endif
+
+  
   output_led_setup();
   input_setup();
 
   enter_SETUP_MODE();
 }
 
-void loop() {
-
+void loop() 
+{
    input_switches_scan_tick();
+   input_zone_scan_tick();
    switch(g_process_mode) {
+    case SETUP_MODE: process_SETUP_MODE();break;
     case IDLE_MODE: process_IDLE_MODE();break;
     case GAME_MODE:process_GAME_MODE();break;
     case WIN_MODE:process_WIN_MODE();break;
     case LOSS_MODE:process_LOSS_MODE();break;
-    case WAIT_MODE:process_WAIT_MODE();break;
    } // switch
-   
+
 } 
 
 /* ======== SETUP_MODE ========*/
@@ -70,21 +80,21 @@ void enter_SETUP_MODE()
       Serial.println(F(" seconds uptime"));
     #endif
     g_process_mode=SETUP_MODE;
+
 }
 
 void process_SETUP_MODE()
 {
-  int zone=get_contact_zone();
+  int zone=input_get_contact_zone();
   if(zone==ZONE_LANDING_1 || zone==ZONE_LANDING_2) {
-    if (get_contact_state_duration()>1000) {
+    if (input_get_contact_state_duration()>100) {
       start_zone=zone;
-      finish_zone= start_contact==ZONE_LANDING_1 ? ZONE_LANDING_2 : ZONE_LANDING_1;
+      finish_zone= start_zone==ZONE_LANDING_1 ? ZONE_LANDING_2 : ZONE_LANDING_1;
       enter_IDLE_MODE();
       return;
     }
   }
-
-  // Todo Play "Setup" Animation
+  output_scene_setup();
 }
 /* ======== IDLE_MODE ========*/
 
@@ -108,12 +118,11 @@ void process_IDLE_MODE()
       return;
    }
 
-   if(get_contact_zone()==ZONE_NONE && get_contact_state_duration()>1000) {
+   if(input_get_contact_zone()==ZONE_NONE && input_get_contact_state_duration()>100) {
     enter_GAME_MODE();
     return;
    }
-
-   // Todo play idle animation
+   output_scene_idle();
 }
 
 /* ======== GAME_MODE ========*/
@@ -128,15 +137,55 @@ void enter_GAME_MODE()
       Serial.println(F(" seconds uptime"));
     #endif
     g_process_mode=GAME_MODE;
-    /* define all paramters according to difficulty */
+    unsigned long foul_detect_interval=0;
+    foul_detect_interval=1;
+    foul_speed=1000;
+    foul_fallback_rate=0;
+    foul_counter=0;
+    foul_running=false;
+    foul_autoincrement=0;
+    foul_current_cumulation=0;
+    mode_time_sync_register=millis();
+    switch (g_current_difficulty) {
+      case 0:
+      case 1:
+      case 2:
+        foul_detect_interval=300;
+        foul_autoincrement=0;
+        foul_speed=5;
+        foul_fallback_rate=0;
+    }
 }
 
 void process_GAME_MODE()
 {
-  /* start zone = back to idle or beep */
-  /* Hot - count up and transotion to loss */
-  /* finish zone = win */
+  if(input_get_contact_zone()==ZONE_HOT && input_get_contact_state_duration()>foul_detect_interval) {
+    foul_running=true;
+    foul_current_cumulation=(input_get_contact_state_duration()-foul_detect_interval)*foul_speed;
+    if(foul_current_cumulation+foul_counter>FOUL_LIMIT) {
+      enter_LOSS_MODE();
+      return;
+    }
+    #ifdef TRACE_SCORE
+        Serial.print(F(">TRACE_SCORE"));
+        Serial.println(foul_current_cumulation+foul_counter);
+    #endif
+  } else foul_running=false;
   
+  if(input_get_contact_zone()!=ZONE_HOT && foul_current_cumulation>0) {
+    foul_counter+=foul_current_cumulation;
+    foul_current_cumulation=0;
+    #ifdef TRACE_SCORE
+        Serial.println(F(">TRACE_SCORE - contact ended"));
+    #endif
+  }
+
+  if(input_get_contact_zone()==finish_zone) {
+    enter_WIN_MODE();
+    return;
+  }
+
+  output_scene_game();
 }
 
 /* ======== WIN_MODE ========*/
@@ -151,13 +200,18 @@ void enter_WIN_MODE()
       Serial.println(F(" seconds uptime"));
     #endif
     g_process_mode=WIN_MODE;
+    mode_time_sync_register=millis();
 }
 
 
 void process_WIN_MODE()
 {
-  /* Play animation for given time */
-  /* switch to setup */
+  if(millis()-mode_time_sync_register > 10000 || input_selectGotPressed()) 
+  {
+    enter_SETUP_MODE();
+  }
+
+  output_scene_win(millis()-mode_time_sync_register);
 }
 
 /* ======== LOSS_MODE ========*/
@@ -172,12 +226,34 @@ void enter_LOSS_MODE()
       Serial.println(F(" seconds uptime"));
     #endif
     g_process_mode=LOSS_MODE;
+    mode_time_sync_register=millis();
 }
 
 void process_LOSS_MODE()
 {
-  /* Play animation for given time */
-  /* switch to setup */
+  if(millis()-mode_time_sync_register > 10000 || input_selectGotPressed()) 
+  {
+    enter_SETUP_MODE();
+  }
+  output_scene_loss(millis()-mode_time_sync_register);
 }
 
+/* ******************** Memory Helper *************** */
+ 
+#ifdef __arm__
+// should use uinstd.h to define sbrk but Due causes a conflict
+extern "C" char* sbrk(int incr);
+#else  // __ARM__
+extern char *__brkval;
+#endif  // __arm__
 
+int freeMemory() {
+  char top;
+#ifdef __arm__
+  return &top - reinterpret_cast<char*>(sbrk(0));
+#elif defined(CORE_TEENSY) || (ARDUINO > 103 && ARDUINO != 151)
+  return &top - __brkval;
+#else  // __arm__
+  return __brkval ? &top - __brkval : &top - __malloc_heap_start;
+#endif  // __arm__
+}

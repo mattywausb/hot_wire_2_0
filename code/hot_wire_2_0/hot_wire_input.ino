@@ -1,5 +1,3 @@
-//#define TRACE_ON 
-
 /* Functions to handle all input elements */
 
 #include "mainSettings.h"
@@ -19,9 +17,9 @@ const unsigned long contact_debounce_tolerance = 500; // milliseconds
 const byte digi_pin_list[] = {2,    // Mode Select 
                                };
 #define INPUT_PORT_COUNT sizeof(digi_pin_list)
-#define INPUT_CHANGE_COOLDOWN 10   // Milliseconds until we accept the next state change of an input
+#define INPUT_BUTTON_COOLDOWN 10   // Milliseconds until we accept the next state change of an input
 
-                               };
+                             
 
 /* Button variables */
 
@@ -64,8 +62,9 @@ unsigned long input_last_change_time = 0;
 
 /* Analog Input Handling */
 #define VOLTAGE_PIN 12
-const byte zone_pin_list[] = {0,1,2 }    // hot wire, Landing 1, landing 2
-#define ZONE_COUNT sizeof(ana_pin_list)
+const byte zone_pin_list[] = {0,1,2 };    // hot wire, Landing 1, landing 2
+
+#define ZONE_COUNT sizeof(zone_pin_list)
 #define ANALOG_HIGH_THRESHOLD 512
 #define ANALOG_COOLDOWN_INTERVAL 70 
 unsigned long analog_prev_measure_time = 0;
@@ -112,6 +111,14 @@ long input_getLastPressDuration()
 }
 
 
+int input_get_contact_zone()  {return analog_current_zone;}
+
+unsigned long input_get_contact_state_duration() 
+{
+  return analog_contact_end_time-analog_contact_start_time;
+}
+
+
 /* ------------- Operations ----------------- */
 
 
@@ -143,7 +150,7 @@ void input_switches_scan_tick()
     buttons_last_read_time = millis();
     
     for (int i = 0; i <INPUT_PORT_COUNT; i++) { // for all input ports configured
-      isPressed=!digitalRead(switch_pin_list[i]);
+      isPressed=!digitalRead(digi_pin_list[i]);
       bitWrite(button_raw_state,i*2,isPressed);  
     }
   }
@@ -182,23 +189,23 @@ void input_switches_scan_tick()
 
 /* essential wire test, returns number of the wire, when there is contact or -1 if there is no contact -2 if there are ambiguos readings */
 
-int get_contact_zone()
+void input_zone_scan_tick()
 { 
-   if(millis()-analog_prev_measure_time< ANALOG_COOLDOWN_INTERVAL) return analog_current_zone;  // Provide previous result until cooldown is over
+   if(millis()-analog_prev_measure_time< ANALOG_COOLDOWN_INTERVAL) return;  // Provide previous result until cooldown is over
    analog_prev_measure_time=millis();
    
    int zone;
    byte analogHigh;
    /* check for false contacts */
    digitalWrite(VOLTAGE_PIN,LOW);  
-   for(c=0;c<ZONE_COUNT;c++) {      
-      analogHigh=analogRead(c)>ANALOG_HIGH_THRESHOLD;
+   for(zone=0;zone<ZONE_COUNT;zone++) {      
+      analogHigh=analogRead(zone)>ANALOG_HIGH_THRESHOLD;
       if(analogHigh) return -2;   // since we dont provide voltage yet, there should be no reading
    }
 
    /* Now check for real contact */
    digitalWrite(VOLTAGE_PIN,HIGH);  
-   for(zone=0;zone<ZONE_COUNT;c++) {      
+   for(zone=0;zone<ZONE_COUNT;zone++) {      
       analogHigh=analogRead(zone)>ANALOG_HIGH_THRESHOLD;
       if(analogHigh) break;  
    }
@@ -211,28 +218,25 @@ int get_contact_zone()
    } else {
      analog_contact_end_time=analog_prev_measure_time;
    }
-   return analog_current_zone;
+   return ;
 }
 
-unsigned long get_contact_state_duration() 
-{
-  return analog_contact_end_time-analog_contact_start_time;
-}
 
 /* ***************************       S E T U P           ******************************
 */
 
-void input_setup() {
+void input_setup() 
+{
 
   /* Initialize switch pins and raw_state_register array */
   for (byte switchIndex = 0; switchIndex < INPUT_PORT_COUNT ; switchIndex++) {
-    pinMode(switch_pin_list[switchIndex], INPUT_PULLUP);
+    pinMode(digi_pin_list[switchIndex], INPUT_PULLUP);
   }
 
   pinMode(VOLTAGE_PIN, OUTPUT); digitalWrite(VOLTAGE_PIN,LOW);
 
   analog_contact_start_time=analog_contact_end_time=0;
-  
-  setupComplete = true;
+  input_zone_scan_tick();
+
 }
 
