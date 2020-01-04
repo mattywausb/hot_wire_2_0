@@ -42,18 +42,24 @@ void output_led_setup()
     digitalWrite(LED_BUILTIN, false);                        
 }
 
+int output_get_pixel_foul_amount() {return pixel_foul_amount;}
+
 /* ============= SCENES ============== */
 
 
 /* ---- SETUP ---- */
 void output_scene_setup()
 {
-  byte blink= 0==(millis()/500)%2;
+  byte blink=(millis()/100)%2;
   for(int p=0;p<PIXEL_COUNT;p++) {
     switch(p){
     case 0:
+        if(!blink) light_bar.setPixelColor(p, light_bar.Color(20,0,128));
+        else light_bar.setPixelColor(p, light_bar.Color(0,0,0));
+        break;
     case 7:
-        light_bar.setPixelColor(p, light_bar.Color(255,255,0));
+        if(blink) light_bar.setPixelColor(p, light_bar.Color(20,0,128));
+        else light_bar.setPixelColor(p, light_bar.Color(0,0,0));
         break;
     case 3:
     case 4:
@@ -74,7 +80,7 @@ void output_scene_idle()
 {
   byte blink= 255-((millis()/10)%255);
   for(int p=0;p<PIXEL_COUNT;p++) {
-    if(p+1%3<2 && p/3<=g_current_difficulty) light_bar.setPixelColor(p, light_bar.Color(0,blink>>1,blink));
+    if(p%3<2 && p/3<=g_current_difficulty) light_bar.setPixelColor(p, light_bar.Color(0,blink>>1,blink));
     else light_bar.setPixelColor(p, light_bar.Color(0,0,0));
   }
   output_led_show();
@@ -145,7 +151,7 @@ void output_scene_win(unsigned long millis_since_start)              /* SCENE WI
     for(int p=4;p<PIXEL_COUNT;p++) {
        byte value=((4-p+blink)%4)*60;  // transform to value from 10-250  
        light_bar.setPixelColor(p, light_bar.Color(0,value,0));              
-       light_bar.setPixelColor(PIXEL_COUNT-p, light_bar.Color(0,value,0));              
+       light_bar.setPixelColor(PIXEL_COUNT-p-1, light_bar.Color(0,value,0));              
     }
   } else {                        // show final result
     for(int p=0;p<PIXEL_COUNT;p++) {

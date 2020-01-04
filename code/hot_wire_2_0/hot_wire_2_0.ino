@@ -20,6 +20,7 @@ PROCESS_MODES g_process_mode = SETUP_MODE;
 /* current game setting */
 
 #define FOUL_LIMIT 32000
+#define RESTART_THRESHOLD 10000
 
 int g_current_difficulty=1;
 
@@ -29,12 +30,14 @@ int foul_speed=0;
 int foul_fallback_rate=0;
 int foul_counter=0;
 int foul_autoincrement=0;
+unsigned long game_frame_start_time=0;
 unsigned long foul_current_cumulation=0;
 unsigned long mode_time_sync_register=0;
 boolean foul_running=false;
 int start_zone=-4;
 int finish_zone=-4;
 
+#define GAME_FRAME_DURATION 100
 
 void setup() 
 {
@@ -145,33 +148,62 @@ void enter_GAME_MODE()
     foul_running=false;
     foul_autoincrement=0;
     foul_current_cumulation=0;
-    mode_time_sync_register=millis();
+    game_frame_start_time=mode_time_sync_register=millis();
     switch (g_current_difficulty) {
       case 0:
+        foul_detect_interval=500;
+        foul_autoincrement=0;
+        foul_speed=4;
+        foul_fallback_rate=50;
+        break;
       case 1:
-      case 2:
         foul_detect_interval=300;
         foul_autoincrement=0;
-        foul_speed=5;
+        foul_speed=7;
         foul_fallback_rate=0;
+        break;
+      case 2:
+        foul_detect_interval=150;
+        foul_autoincrement=60;
+        foul_speed=7;
+        foul_fallback_rate=0;
+        break;
     }
 }
 
 void process_GAME_MODE()
 {
+  if(input_get_contact_zone()==start_zone&& (millis()-mode_time_sync_register<RESTART_THRESHOLD || input_get_contact_state_duration()>RESTART_THRESHOLD)) {
+    enter_IDLE_MODE();
+    return;
+  }
+  
   if(input_get_contact_zone()==ZONE_HOT && input_get_contact_state_duration()>foul_detect_interval) {
     foul_running=true;
     foul_current_cumulation=(input_get_contact_state_duration()-foul_detect_interval)*foul_speed;
-    if(foul_current_cumulation+foul_counter>FOUL_LIMIT) {
-      enter_LOSS_MODE();
-      return;
-    }
+    
     #ifdef TRACE_SCORE
         Serial.print(F(">TRACE_SCORE"));
         Serial.println(foul_current_cumulation+foul_counter);
     #endif
   } else foul_running=false;
-  
+
+  if(millis()-game_frame_start_time>GAME_FRAME_DURATION) {
+    game_frame_start_time=millis();
+    foul_counter+=foul_autoincrement;  // Manage autoincrement
+    if(foul_fallback_rate>0) {          // Manage fallback
+      int pixel_remainder=foul_counter%output_get_pixel_foul_amount();
+      if( pixel_remainder>0) 
+          if(foul_fallback_rate<pixel_remainder) foul_counter-=foul_fallback_rate;
+          else foul_counter-=pixel_remainder;
+    }
+  }
+
+  if(foul_current_cumulation+foul_counter>FOUL_LIMIT) {
+      enter_LOSS_MODE();
+      return;
+  }
+    
   if(input_get_contact_zone()!=ZONE_HOT && foul_current_cumulation>0) {
     foul_counter+=foul_current_cumulation;
     foul_current_cumulation=0;
@@ -206,7 +238,7 @@ void enter_WIN_MODE()
 
 void process_WIN_MODE()
 {
-  if(millis()-mode_time_sync_register > 10000 || input_selectGotPressed()) 
+  if(millis()-mode_time_sync_register > 15000 || input_selectGotPressed()) 
   {
     enter_SETUP_MODE();
   }
