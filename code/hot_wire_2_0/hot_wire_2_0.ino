@@ -50,6 +50,7 @@ void setup()
 
   
   output_led_setup();
+  sound_setup();
   input_setup();
 
   enter_SETUP_MODE();
@@ -66,7 +67,7 @@ void loop()
     case WIN_MODE:process_WIN_MODE();break;
     case LOSS_MODE:process_LOSS_MODE();break;
    } // switch
-
+   sound_tick();
 } 
 
 /* ======== SETUP_MODE ========*/
@@ -83,7 +84,8 @@ void enter_SETUP_MODE()
       Serial.println(F(" seconds uptime"));
     #endif
     g_process_mode=SETUP_MODE;
-
+    foul_counter=0;
+   
 }
 
 void process_SETUP_MODE()
@@ -96,6 +98,11 @@ void process_SETUP_MODE()
       enter_IDLE_MODE();
       return;
     }
+  }
+  if(zone==ZONE_HOT) {
+    sound_start_beep();
+  } else {
+   sound_stop();
   }
   output_scene_setup();
 }
@@ -111,6 +118,7 @@ void enter_IDLE_MODE()
       Serial.println(F(" seconds uptime"));
     #endif
     g_process_mode=IDLE_MODE;
+     sound_start_GameStartMelody();
 }
 
 void process_IDLE_MODE()
@@ -188,6 +196,12 @@ void process_GAME_MODE()
     #endif
   } else foul_running=false;
 
+  if(input_get_contact_zone()==ZONE_HOT) {
+    sound_start_beep();
+  } else {
+    sound_stop();
+  }
+
   if(millis()-game_frame_start_time>GAME_FRAME_DURATION) {
     game_frame_start_time=millis();
     foul_counter+=foul_autoincrement;  // Manage autoincrement
@@ -233,6 +247,7 @@ void enter_WIN_MODE()
     #endif
     g_process_mode=WIN_MODE;
     mode_time_sync_register=millis();
+    sound_start_GameOverMelody();
 }
 
 
@@ -259,6 +274,7 @@ void enter_LOSS_MODE()
     #endif
     g_process_mode=LOSS_MODE;
     mode_time_sync_register=millis();
+    sound_start_Crash();
 }
 
 void process_LOSS_MODE()

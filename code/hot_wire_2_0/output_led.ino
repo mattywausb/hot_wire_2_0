@@ -19,8 +19,8 @@
 #define PIXEL_BRIGHTNESS 100 // only 1/2 of amps necessary
 
 unsigned long fade_start_time=0;
-#define FADE_DURATION 1000
-#define FADE_DURATION_F 2000.0
+#define FADE_DURATION 750
+#define FADE_DURATION_F 750.0
 
 t_color_hsv hsv_yellow={60,1,1};
 t_color_hsv hsv_green={120,1,1};
